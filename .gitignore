@@ -151,3 +151,6 @@ pip-selfcheck.json
 
 ### Custom ###
 CARLA/
+trash/
+data/
+.idea/
