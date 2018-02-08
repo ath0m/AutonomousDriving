@@ -66,32 +66,32 @@ class AutoDriver:
         settings = CarlaSettings()
         settings.set(SynchronousMode=False,
                      SendNonPlayerAgentsInfo=False,
-                     NumberOfVehicles=10,
+                     NumberOfVehicles=0,
                      NumberOfPedestrians=0,
                      WeatherId=0)
         settings.randomize_seeds()
 
-        camera0 = sensor.Camera('CameraRGB')
+        camera0 = sensor.Camera('CameraCenter')
         camera0.set_image_size(WINDOW_WIDTH, WINDOW_HEIGHT)
         camera0.set_position(200, 0, 140)
         camera0.set_rotation(0.0, 0.0, 0.0)
         settings.add_sensor(camera0)
 
-        camera1 = sensor.Camera('CameraDepth', PostProcessing='Depth')
+        camera1 = sensor.Camera('CameraLeft')
         camera1.set_image_size(WINDOW_WIDTH, WINDOW_HEIGHT)
         camera1.set_position(200, 0, 140)
-        camera1.set_rotation(0.0, 0.0, 0.0)
+        camera1.set_rotation(0.0, 0.0, -30.0)
         settings.add_sensor(camera1)
 
-        camera2 = sensor.Camera('CameraSemSeg', PostProcessing='SemanticSegmentation')
+        camera2 = sensor.Camera('CameraRight')
         camera2.set_image_size(WINDOW_WIDTH, WINDOW_HEIGHT)
         camera2.set_position(200, 0, 140)
-        camera2.set_rotation(0.0, 0.0, 0.0)
+        camera2.set_rotation(0.0, 0.0, 30.0)
         settings.add_sensor(camera2)
 
         if self.map_view is not None:
             camera3 = sensor.Camera('TPPCamera')
-            camera3.set_image_size(self.map_view.shape[0], WINDOW_HEIGHT // 2)
+            camera3.set_image_size(self.map_view.shape[1], WINDOW_HEIGHT // 2)
             camera3.set_position(-450, 0, 400)
             camera3.set_rotation(-30.0, 0.0, 0.0)
             settings.add_sensor(camera3)
@@ -131,9 +131,9 @@ class AutoDriver:
         if self.data is not None:
             measurements, sensor_data = self.data
 
-            self.main_view = sensor_data['CameraRGB']
-            self.second_view = sensor_data['CameraDepth']
-            self.third_view = sensor_data['CameraSemSeg']
+            self.main_view = sensor_data['CameraCenter']
+            self.second_view = sensor_data['CameraLeft']
+            self.third_view = sensor_data['CameraRight']
 
             if self.city_name is not None:
                 self.tpp_view = sensor_data['TPPCamera']
@@ -153,19 +153,19 @@ class AutoDriver:
 
             self.display.blit(surface, (0, 0))
 
-        if self.second_view is not None:
-            array = image_converter.depth_to_logarithmic_grayscale(self.second_view)
-            surface = pygame.surfarray.make_surface(array.swapaxes(0, 1))
-            surface = pygame.transform.scale(surface, (WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2))
-
-            self.display.blit(surface, (0, WINDOW_HEIGHT))
-
-        if self.third_view is not None:
-            array = image_converter.labels_to_cityscapes_palette(self.third_view)
-            surface = pygame.surfarray.make_surface(array.swapaxes(0, 1))
-            surface = pygame.transform.scale(surface, (WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2))
-
-            self.display.blit(surface, (WINDOW_WIDTH // 2, WINDOW_HEIGHT))
+        # if self.second_view is not None:
+        #     array = image_converter.to_rgb_array(self.second_view)
+        #     surface = pygame.surfarray.make_surface(array.swapaxes(0, 1))
+        #     surface = pygame.transform.scale(surface, (WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2))
+        #
+        #     self.display.blit(surface, (0, WINDOW_HEIGHT))
+        #
+        # if self.third_view is not None:
+        #     array = image_converter.to_rgb_array(self.third_view)
+        #     surface = pygame.surfarray.make_surface(array.swapaxes(0, 1))
+        #     surface = pygame.transform.scale(surface, (WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2))
+        #
+        #     self.display.blit(surface, (WINDOW_WIDTH // 2, WINDOW_HEIGHT))
 
         if self.map_view is not None:
             array = self.map_view[:, :, :3]
@@ -194,10 +194,10 @@ class AutoDriver:
                 array = image_converter.to_rgb_array(self.tpp_view)
                 surface = pygame.surfarray.make_surface(array.swapaxes(0, 1))
 
-                self.display.blit(surface, (WINDOW_WIDTH, self.map_view.shape[1]))
+                self.display.blit(surface, (WINDOW_WIDTH, self.map_view.shape[0]))
 
             # Render text messages
-            surface = pygame.Surface((self.map_view.shape[0], WINDOW_HEIGHT // 2))
+            surface = pygame.Surface((self.map_view.shape[1], WINDOW_HEIGHT // 2))
             surface.fill(0xffffff)
 
             font = pygame.font.SysFont("monospace", 20)
@@ -228,7 +228,7 @@ class AutoDriver:
         self.connect = True
 
         dir_name = datetime.now().strftime('%Y%m%d%H%M%S')
-        self.episode_data_dir = os.path.join(os.getcwd(), 'data', dir_name)
+        self.episode_data_dir = os.path.join(os.getcwd(), 'data', 'raw', dir_name)
 
         os.mkdir(self.episode_data_dir)
         os.mkdir(os.path.join(self.episode_data_dir, 'IMG'))
@@ -241,7 +241,7 @@ class AutoDriver:
         queue, done = Queue(), Queue()
         workers = 5
         pool = Pool(workers, record, (queue, done))
-        fieldnames = ['Center', 'Depth', 'Speed', 'Steer', 'Throttle']
+        fieldnames = ['Left', 'Center', 'Right', 'Speed', 'Steer', 'Throttle']
 
         sim = Thread(target=read_simulator_data, args=(self.client, self))
 
@@ -267,7 +267,9 @@ class AutoDriver:
                 if self.recording:
                     path = os.path.join(self.episode_data_dir, 'IMG')
                     name = datetime.now().strftime('%Y%m%d%H%M%S%f')
-                    cameras = [(self.main_view, 'Center', 0), (self.second_view, 'Depth', 1)]
+                    cameras = [(self.main_view, 'Center', 0),
+                               (self.second_view, 'Left', 0),
+                               (self.third_view, 'Right', 0)]
                     queue.put((path, name, cameras, self.info.copy()))
         finally:
             pygame.quit()

@@ -11,7 +11,7 @@ def main():
     while True:
         try:
             with make_carla_client(host, port) as client:
-                driver = AutoDriver(client, 'Town02')
+                driver = AutoDriver(client, 'Town01')
                 driver.start()
                 break
         except TCPConnectionError:

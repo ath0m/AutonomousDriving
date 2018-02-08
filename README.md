@@ -25,6 +25,10 @@ Serwer CARLA uruchamiamy poleceniem
 
 ## Dashboard
 
-![dashboard](dashboard.png)
+![dashboard](samples/dashboard.png)
+
+## Wyniki modelu
+
+![](samples/model_steer.png)
 
 

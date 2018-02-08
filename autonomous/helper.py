@@ -1,6 +1,7 @@
 from carla import image_converter
 import cv2
 import csv
+import os
 
 
 def record(queue, done):
