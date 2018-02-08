@@ -67,9 +67,10 @@ class AutoDriver:
         self.main_view = None
         self.second_view = None
         self.third_view = None
+        self.tpp_view = None
 
         self.map = CarlaMap(city_name, 16.43, 50.0) if city_name is not None else None
-        self.map_view = self.map.get_map(WINDOW_HEIGHT) if city_name is not None else None
+        self.map_view = self.map.get_map(WINDOW_HEIGHT // 2) if city_name is not None else None
         self.map_shape = self.map.map_image.shape if city_name is not None else None
 
         self.info = None
@@ -107,20 +108,27 @@ class AutoDriver:
         camera0 = sensor.Camera('CameraRGB')
         camera0.set_image_size(WINDOW_WIDTH, WINDOW_HEIGHT)
         camera0.set_position(200, 0, 140)
-        camera0.set_rotation(0.0, 0.0, 0.0)
+        camera0.set_rotation(-30.0, 0.0, 0.0)
         settings.add_sensor(camera0)
 
         camera1 = sensor.Camera('CameraDepth', PostProcessing='Depth')
-        camera1.set_image_size(WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2)
+        camera1.set_image_size(WINDOW_WIDTH, WINDOW_HEIGHT)
         camera1.set_position(200, 0, 140)
         camera1.set_rotation(0.0, 0.0, 0.0)
         settings.add_sensor(camera1)
 
         camera2 = sensor.Camera('CameraSemSeg', PostProcessing='SemanticSegmentation')
-        camera2.set_image_size(WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2)
+        camera2.set_image_size(WINDOW_WIDTH, WINDOW_HEIGHT)
         camera2.set_position(200, 0, 140)
         camera2.set_rotation(0.0, 0.0, 0.0)
         settings.add_sensor(camera2)
+
+        if self.map_view is not None:
+            camera3 = sensor.Camera('TPPCamera')
+            camera3.set_image_size(self.map_view.shape[0], WINDOW_HEIGHT // 2)
+            camera3.set_position(-450, 0, 400)
+            camera3.set_rotation(-30.0, 0.0, 0.0)
+            settings.add_sensor(camera3)
 
         self.settings = settings
 
@@ -152,7 +160,7 @@ class AutoDriver:
         self.info['Steer'] = vcontrol.steer
 
     def loop(self):
-        self.clock.tick(15)
+        self.clock.tick(30)
 
         print_over_same_line('{} FPS {}'.format(self.clock.get_fps(), self.recording))
 
@@ -163,6 +171,8 @@ class AutoDriver:
         self.third_view = sensor_data['CameraSemSeg']
 
         if self.city_name is not None:
+            self.tpp_view = sensor_data['TPPCamera']
+
             position = self.map.convert_to_pixel([
                 measurements.player_measurements.transform.location.x,
                 measurements.player_measurements.transform.location.y,
@@ -180,12 +190,14 @@ class AutoDriver:
 
         if self.second_view is not None:
             array = image_converter.depth_to_logarithmic_grayscale(self.second_view)
+            array = cv2.resize(array, (WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2))
             surface = pygame.surfarray.make_surface(array.swapaxes(0, 1))
 
             self.display.blit(surface, (0, WINDOW_HEIGHT))
 
         if self.third_view is not None:
             array = image_converter.labels_to_cityscapes_palette(self.third_view)
+            array = cv2.resize(array, (WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2))
             surface = pygame.surfarray.make_surface(array.swapaxes(0, 1))
 
             self.display.blit(surface, (WINDOW_WIDTH // 2, WINDOW_HEIGHT))
@@ -210,6 +222,32 @@ class AutoDriver:
 
             self.display.blit(surface, (WINDOW_WIDTH, 0))
 
+            # Render TPP camera
+
+            if self.tpp_view is not None:
+                array = image_converter.to_rgb_array(self.tpp_view)
+                surface = pygame.surfarray.make_surface(array.swapaxes(0, 1))
+
+                self.display.blit(surface, (WINDOW_WIDTH, self.map_view.shape[1]))
+
+            # Render text messages
+            surface = pygame.Surface((self.map_view.shape[0], WINDOW_HEIGHT // 2))
+            surface.fill(0xffffff)
+
+            font = pygame.font.SysFont("monospace", 20)
+
+            messages = ['FPS: {0:.3f}'.format(self.clock.get_fps()),
+                        'Speed: {0:.3f}'.format(self.info['Speed']),
+                        'Steer: {0:.3f}'.format(self.info['Steer']),
+                        'Throttle: {0:.3f}'.format(self.info['Throttle']),
+                        'Recording: {}'.format(bool(self.recording))]
+
+            for i, msg in enumerate(messages):
+                label = font.render(msg, True, (0, 0, 0))
+                surface.blit(label, (20, 25*(i+1)))
+
+            self.display.blit(surface, (WINDOW_WIDTH, WINDOW_HEIGHT))
+
         pygame.display.flip()
 
     def episode(self):
@@ -221,8 +259,8 @@ class AutoDriver:
         self.info = {}
         self.recording = None
         
-        dirname = datetime.now().strftime('%Y%m%d%H%M')
-        self.episode_data_dir = os.path.join(os.getcwd(), 'data', dirname)
+        dir_name = datetime.now().strftime('%Y%m%d%H%M%S')
+        self.episode_data_dir = os.path.join(os.getcwd(), 'data', dir_name)
         
         os.mkdir(self.episode_data_dir)
         os.mkdir(os.path.join(self.episode_data_dir, 'IMG'))
