@@ -153,19 +153,19 @@ class AutoDriver:
 
             self.display.blit(surface, (0, 0))
 
-        # if self.second_view is not None:
-        #     array = image_converter.to_rgb_array(self.second_view)
-        #     surface = pygame.surfarray.make_surface(array.swapaxes(0, 1))
-        #     surface = pygame.transform.scale(surface, (WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2))
-        #
-        #     self.display.blit(surface, (0, WINDOW_HEIGHT))
-        #
-        # if self.third_view is not None:
-        #     array = image_converter.to_rgb_array(self.third_view)
-        #     surface = pygame.surfarray.make_surface(array.swapaxes(0, 1))
-        #     surface = pygame.transform.scale(surface, (WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2))
-        #
-        #     self.display.blit(surface, (WINDOW_WIDTH // 2, WINDOW_HEIGHT))
+        if self.second_view is not None:
+            array = image_converter.to_rgb_array(self.second_view)
+            surface = pygame.surfarray.make_surface(array.swapaxes(0, 1))
+            surface = pygame.transform.scale(surface, (WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2))
+
+            self.display.blit(surface, (0, WINDOW_HEIGHT))
+
+        if self.third_view is not None:
+            array = image_converter.to_rgb_array(self.third_view)
+            surface = pygame.surfarray.make_surface(array.swapaxes(0, 1))
+            surface = pygame.transform.scale(surface, (WINDOW_WIDTH // 2, WINDOW_HEIGHT // 2))
+
+            self.display.blit(surface, (WINDOW_WIDTH // 2, WINDOW_HEIGHT))
 
         if self.map_view is not None:
             array = self.map_view[:, :, :3]
@@ -228,7 +228,7 @@ class AutoDriver:
         self.connect = True
 
         dir_name = datetime.now().strftime('%Y%m%d%H%M%S')
-        self.episode_data_dir = os.path.join(os.getcwd(), 'data', 'raw', dir_name)
+        self.episode_data_dir = os.path.join(os.getcwd(), 'data', dir_name)
 
         os.mkdir(self.episode_data_dir)
         os.mkdir(os.path.join(self.episode_data_dir, 'IMG'))
