@@ -62,12 +62,12 @@ $ python setup.py install
 
 ###### Uczenie modelu
 ```bash
-scripts/model.py [-h] [--load LOAD] [--save SAVE] [--validation VALIDATION] [--epochs EPOCHS] data
+utils/model.py [-h] [--load LOAD] [--save SAVE] [--validation VALIDATION] [--epochs EPOCHS] data
 ```
 
 ###### Porównanie sterowania
 ```bash
-scripts/plot_steer.py [-h] --data DATA [--model MODEL]
+utils/plot_steer.py [-h] --data DATA [--model MODEL]
 ```
 
 ## Dashboard
