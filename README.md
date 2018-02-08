@@ -103,7 +103,18 @@ Zestaw testowy został zebrany osobno i częsciowo jadąc w przeciwną stronę
 
 ![Postprocessing](samples/postprocessing.png)
 
+## Struktura modelu
+
+![Model](samples/model.png)
 
 ## Wyniki modelu
 
+Sprawdziłem jak dla zbioru testowego wyglądają rzeczywiste kąty, a jak te przewidziane przez model
+
 ![](samples/model_steer.png)
+
+I nie wygląda to za ciekawie. Widać, że model nie radzi sobie z zakrętami. Jedyne z czym sobie może poradzić to jazda prosto. Jest to część nad którą należy popracować.
+
+## Rozpoznawanie obiektów
+
+Do tego zostanie wykorzystany model YOLO v2 oraz biblioteka darkflow
