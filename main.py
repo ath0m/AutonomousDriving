@@ -7,9 +7,10 @@ from carla.planner.map import CarlaMap
 from carla.settings import CarlaSettings
 from carla.util import print_over_same_line
 
+import cv2
 import pygame
-from pygame.locals import K_r
 
+import csv
 import os
 from datetime import datetime
 from multiprocessing import Queue, Pool
@@ -18,18 +19,39 @@ WINDOW_WIDTH = 800
 WINDOW_HEIGHT = 600
 
 
-def record(queue):
+def record(queue, done):
+    converters = [image_converter.to_bgra_array,
+                  image_converter.depth_to_logarithmic_grayscale,
+                  image_converter.labels_to_cityscapes_palette]
+
     while True:
         item = queue.get(True)
         if item is None:
             break
 
-        img, path = item
+        path, name, cameras, extra = item
 
-        filename = '{}.png'.format(datetime.now().strftime('%Y%m%d%H%M%S%f'))
-        path = os.path.join(path, 'IMG', filename)
+        for img, cam, t in cameras:
+            filename = '{}_{}.png'.format(cam, name)
+            img_path = os.path.join(path, filename)
 
-        img.save_to_disk(path)
+            convert = converters[t]
+            array = convert(img)
+
+            cv2.imwrite(img_path, array)
+            extra[cam] = filename
+
+        done.put(extra)
+
+
+def dump_record_to_csv(done, path, fieldnames):
+    with open(path, 'a') as csv_file:
+        writer = csv.DictWriter(csv_file, fieldnames=fieldnames)
+
+        writer.writeheader()
+        while not done.empty():
+            row = done.get()
+            writer.writerow(row)
 
 
 class AutoDriver:
@@ -50,6 +72,7 @@ class AutoDriver:
         self.map_view = self.map.get_map(WINDOW_HEIGHT) if city_name is not None else None
         self.map_shape = self.map.map_image.shape if city_name is not None else None
 
+        self.info = None
         self.positions = None
         self.episode_data_dir = None
         self.recording = None
@@ -125,13 +148,11 @@ class AutoDriver:
   
         self.client.send_control(vcontrol)
 
-        keys = pygame.key.get_pressed()
-
-        if keys[K_r]:
-            self.recording = not self.recording
+        self.info['Throttle'] = vcontrol.throttle if throttle > 0 else -vcontrol.brake
+        self.info['Steer'] = vcontrol.steer
 
     def loop(self):
-        self.clock.tick(30)
+        self.clock.tick(15)
 
         print_over_same_line('{} FPS {}'.format(self.clock.get_fps(), self.recording))
 
@@ -147,6 +168,8 @@ class AutoDriver:
                 measurements.player_measurements.transform.location.y,
                 measurements.player_measurements.transform.location.z])
             self.positions.append(position)
+
+        self.info['Speed'] = measurements.player_measurements.forward_speed
 
     def render(self):
         if self.main_view is not None:
@@ -191,10 +214,11 @@ class AutoDriver:
 
     def episode(self):
         self.carla_settings()
-        scene = self.client.load_settings(self.settings)
+        _ = self.client.load_settings(self.settings)
         self.client.start_episode(0)
 
         self.positions = []
+        self.info = {}
         self.recording = None
         
         dirname = datetime.now().strftime('%Y%m%d%H%M')
@@ -208,28 +232,44 @@ class AutoDriver:
         self.initialize_display()
         self.episode()
 
-        queue = Queue()
-        pool = Pool(5, record, (queue,))
+        queue, done = Queue(), Queue()
+        workers = 5
+        pool = Pool(workers, record, (queue, done))
+        fieldnames = ['Center', 'Depth', 'Speed', 'Steer', 'Throttle']
 
         try:
             while True:
                 for event in pygame.event.get():
                     if event.type == pygame.QUIT:
                         return
+                    elif event.type == pygame.KEYDOWN:
+                        if event.key == pygame.K_r:
+                            self.recording = not self.recording
+
+                            if not self.recording:
+                                csv_path = os.path.join(self.episode_data_dir, 'driving_log.csv')
+                                dump_record_to_csv(done, csv_path, fieldnames)
+
                 self.control()
                 self.loop()
                 self.render()
 
                 if self.recording:
-                    queue.put((self.main_view, self.episode_data_dir))
+                    path = os.path.join(self.episode_data_dir, 'IMG')
+                    name = datetime.now().strftime('%Y%m%d%H%M%S%f')
+                    cameras = [(self.main_view, 'Center', 0), (self.second_view, 'Depth', 1)]
+                    queue.put((path, name, cameras, self.info.copy()))
         finally:
             pygame.quit()
 
-            for _ in range(10):
+            for _ in range(2*workers):
                 queue.put(None)
 
             pool.close()
             pool.join()
+
+            csv_path = os.path.join(self.episode_data_dir, 'driving_log.csv')
+            dump_record_to_csv(done, csv_path, fieldnames)
 
 
 def main():
@@ -241,7 +281,7 @@ def main():
                 driver = AutoDriver(client, 'Town02')
                 driver.start()
                 break
-        except TCPConnectionError as error:
+        except TCPConnectionError:
             # logging error
             raise
 
